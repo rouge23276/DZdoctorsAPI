@@ -1,0 +1,771 @@
+openapi: 3.0.3
+info:
+  title: Medical Directory API
+  version: 1.0.0
+  description: |
+    API для приложения со списком врачей, страницами врачей и медицинских организаций.
+    Главная — список врачей (мини-карточки). У врача подробная страница с услугами,
+    образованием, отзывами (с поддержкой вложенных ответов). Можно переходить к месту(ам) работы —
+    страницы медицинских организаций с адресом, услугами и списком врачей.
+servers:
+  - url: https://api.example.com
+    description: Production server
+  - url: http://localhost:3000
+    description: Local development
+tags:
+  - name: Doctors
+    description: Операции с врачами
+  - name: Organizations
+    description: Медицинские организации (места работы)
+  - name: Reviews
+    description: Отзывы и ответы на отзывы
+  - name: Media
+    description: Изображения и медиа
+paths:
+  /doctors:
+    get:
+      tags:
+        - Doctors
+      summary: Список врачей (главная)
+      description: Пагинируемый список врачей с мини-карточками:изображение, имя, специальность, рейтинг, количество отзывов.
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+          description: Номер страницы
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+          description: Количество элементов на страницу
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Текстовый поиск по имени или специальности
+        - name: specialty
+          in: query
+          schema:
+            type: string
+          description: Фильтр по специальности
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum:
+              - rating_desc
+              - rating_asc
+              - reviews_desc
+              - reviews_asc
+              - name_asc
+              - name_desc
+            default: rating_desc
+          description: Сортировка
+      responses:
+        '200':
+          description: Список врачей с пагинацией
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorsListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    post:
+      tags:
+        - Doctors
+      summary: Создать нового врача
+      description: Добавление записи врача. Поля first_name и last_name обязательны; full_name опционален и генерируется из first_name + (middle_name) + last_name если не передан.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DoctorCreate'
+      responses:
+        '201':
+          description: Врач создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Doctor'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /doctors/{doctorId}:
+    get:
+      tags:
+        - Doctors
+      summary: Подробная информация о враче
+      parameters:
+        - $ref: '#/components/parameters/doctorId'
+      responses:
+        '200':
+          description: Данные врача
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Doctor'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    put:
+      tags:
+        - Doctors
+      summary: Обновить данные врача
+      parameters:
+        - $ref: '#/components/parameters/doctorId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DoctorUpdate'
+      responses:
+        '200':
+          description: Врач обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Doctor'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - Doctors
+      summary: Удалить врача
+      parameters:
+        - $ref: '#/components/parameters/doctorId'
+      responses:
+        '204':
+          description: Врач удалён
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /organizations:
+    get:
+      tags:
+        - Organizations
+      summary: Список медицинских организаций
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Поиск по названию или адресу
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Список организаций
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationsListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /organizations/{organizationId}:
+    get:
+      tags:
+        - Organizations
+      summary: Информация о медицинской организации
+      parameters:
+        - $ref: '#/components/parameters/organizationId'
+      responses:
+        '200':
+          description: Данные организации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /doctors/{doctorId}/reviews:
+    post:
+      tags:
+        - Reviews
+      summary: Добавить отзыв к врачу
+      parameters:
+        - $ref: '#/components/parameters/doctorId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewCreate'
+      responses:
+        '201':
+          description: Отзыв создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    get:
+      tags:
+        - Reviews
+      summary: Получить отзывы врача (дерево)
+      parameters:
+        - $ref: '#/components/parameters/doctorId'
+        - name: depth
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 5
+          description: Максимальная глубина вложенности ответов (0 — только корневые)
+      responses:
+        '200':
+          description: Дерево отзывов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Review'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /reviews/{reviewId}/replies:
+    post:
+      tags:
+        - Reviews
+      summary: Ответ на отзыв (вложенный отзыв)
+      parameters:
+        - name: reviewId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID отзыва к которому отвечают
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewCreate'
+      responses:
+        '201':
+          description: Ответ создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+components:
+  parameters:
+    doctorId:
+      name: doctorId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Идентификатор врача (UUID)
+    organizationId:
+      name: organizationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Идентификатор медицинской организации (UUID)
+
+  responses:
+    BadRequest:
+      description: Неверный запрос
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        per_page:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 123
+        total_pages:
+          type: integer
+          example: 7
+
+    DoctorsListItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 9f8b7c6a-1234-4d5e-9f8a-abcdef012345
+        first_name:
+          type: string
+          example: Иван
+        last_name:
+          type: string
+          example: Иванов
+        full_name:
+          type: string
+          example: Иван Иванов
+        specialty:
+          type: string
+          example: Терапевт
+        avatar:
+          $ref: '#/components/schemas/MediaItem'
+        rating:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 5
+          example: 4.6
+        reviews_count:
+          type: integer
+          example: 34
+        primary_organization_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    DoctorsListResponse:
+      type: object
+      properties:
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DoctorsListItem'
+
+    MediaItem:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+          example: https://cdn.example.com/avatars/ivan.jpg
+        alt:
+          type: string
+          example: "Фото Ивана Иванова"
+        width:
+          type: integer
+          example: 400
+        height:
+          type: integer
+          example: 400
+
+    Doctor:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 9f8b7c6a-1234-4d5e-9f8a-abcdef012345
+        first_name:
+          type: string
+          example: Иван
+        last_name:
+          type: string
+          example: Иванов
+        middle_name:
+          type: string
+          example: Сергеевич
+        full_name:
+          type: string
+          example: Иван Сергеевич Иванов
+        specialty:
+          type: string
+          example: Терапевт
+        avatar:
+          $ref: '#/components/schemas/MediaItem'
+        rating:
+          type: number
+          format: float
+          example: 4.6
+        reviews_count:
+          type: integer
+          example: 34
+        experience_years:
+          type: integer
+          example: 12
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationRef'
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/Service'
+        education:
+          type: array
+          items:
+            $ref: '#/components/schemas/Education'
+        reviews:
+          type: array
+          items:
+            $ref: '#/components/schemas/Review'
+        biography:
+          type: string
+          example: "Кандидат медицинских наук, специализация — терапия и внутренние болезни."
+
+    DoctorCreate:
+      type: object
+      required:
+        - first_name
+        - last_name
+        - specialty
+      properties:
+        first_name:
+          type: string
+          example: Иван
+        last_name:
+          type: string
+          example: Иванов
+        middle_name:
+          type: string
+          nullable: true
+          example: Сергеевич
+        full_name:
+          type: string
+          nullable: true
+          description: Опционально. Если не задано — генерируется из first_name + (middle_name) + last_name
+        specialty:
+          type: string
+          example: Терапевт
+        avatar:
+          $ref: '#/components/schemas/MediaItem'
+        experience_years:
+          type: integer
+          example: 12
+        primary_organization_id:
+          type: string
+          format: uuid
+          nullable: true
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationRef'
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/Service'
+        education:
+          type: array
+          items:
+            $ref: '#/components/schemas/Education'
+        biography:
+          type: string
+          example: "Кандидат медицинских наук."
+
+    DoctorUpdate:
+      type: object
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        middle_name:
+          type: string
+          nullable: true
+        full_name:
+          type: string
+          nullable: true
+        specialty:
+          type: string
+        avatar:
+          $ref: '#/components/schemas/MediaItem'
+        experience_years:
+          type: integer
+        primary_organization_id:
+          type: string
+          format: uuid
+          nullable: true
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationRef'
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/Service'
+        education:
+          type: array
+          items:
+            $ref: '#/components/schemas/Education'
+        biography:
+          type: string
+
+    OrganizationRef:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address:
+          type: string
+
+    Organization:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: a1b2c3d4-5678-4ef0-9abc-0123456789ab
+        name:
+          type: string
+          example: Клиника "Здоровье"
+        address:
+          $ref: '#/components/schemas/Address'
+        phones:
+          type: array
+          items:
+            type: string
+            example: "+7 (495) 123-45-67"
+        email:
+          type: string
+          format: email
+          example: info@clinic.example
+        website:
+          type: string
+          format: uri
+          example: https://clinic.example
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/Service'
+        doctors:
+          type: array
+          items:
+            $ref: '#/components/schemas/DoctorsListItem'
+        working_hours:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkingHours'
+        location:
+          type: object
+          properties:
+            lat:
+              type: number
+              format: double
+              example: 55.7558
+            lng:
+              type: number
+              format: double
+              example: 37.6173
+
+    OrganizationsListResponse:
+      type: object
+      properties:
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Organization'
+
+    Address:
+      type: object
+      properties:
+        street:
+          type: string
+          example: "ул. Тверская, д. 1"
+        city:
+          type: string
+          example: "Москва"
+        postcode:
+          type: string
+          example: "123456"
+        region:
+          type: string
+          example: "Московская область"
+        country:
+          type: string
+          example: "Россия"
+        full:
+          type: string
+          example: "Россия, Москва, ул. Тверская, д.1"
+
+    Service:
+      type: object
+      properties:
+        id:
+          type: string
+          example: srv-001
+        name:
+          type: string
+          example: "Консультация терапевта"
+        description:
+          type: string
+          example: "Прием врача, первичный/повторный"
+        price:
+          type: number
+          format: float
+          nullable: true
+          example: 1200.0
+        duration_minutes:
+          type: integer
+          example: 30
+
+    Education:
+      type: object
+      properties:
+        institution:
+          type: string
+          example: "МГУ им. М.В. Ломоносова"
+        degree:
+          type: string
+          example: "Специалист"
+        specialty:
+          type: string
+          example: "Лечебное дело"
+        year_graduated:
+          type: integer
+          example: 2010
+        certificate:
+          type: string
+          nullable: true
+          example: "Свидетельство о повышении квалификации"
+
+    WorkingHours:
+      type: object
+      properties:
+        day_of_week:
+          type: string
+          enum:
+            - Mon
+            - Tue
+            - Wed
+            - Thu
+            - Fri
+            - Sat
+            - Sun
+        opens_at:
+          type: string
+          pattern: '^([01]\\d|2[0-3]):([0-5]\\d)$'
+          example: "09:00"
+        closes_at:
+          type: string
+          pattern: '^([01]\\d|2[0-3]):([0-5]\\d)$'
+          example: "18:00"
+
+    Review:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: rev-001
+        author_name:
+          type: string
+          example: "Мария"
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 5
+        text:
+          type: string
+          example: "Отличный специалист, внимательный и грамотный."
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-09-01T12:34:56Z"
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+        replies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Review'
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/MediaItem'
+
+    ReviewCreate:
+      type: object
+      required:
+        - author_name
+        - text
+      properties:
+        author_name:
+          type: string
+          example: "Алексей"
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 5
+        text:
+          type: string
+          example: "Спасибо врачу за помощь."
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/MediaItem'
+
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+          example: validation_error
+        message:
+          type: string
+          example: "Некорректные данные"
+        details:
+          type: object
+          additionalProperties: true
+
+security:
+  - BearerAuth: []
